@@ -1,0 +1,18 @@
+services:
+  backend:
+    build:
+      context: ./backend
+    container_name: hospitalflow-backend
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: hospitalflow-frontend
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+    restart: unless-stopped

@@ -1,0 +1,28 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Node.js
+node_modules/
+dist/
+
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+
+# IDE and OS files
+.vscode/
+.idea/
+.DS_Store
+
+# Logs
+*.log
+
+# Terraform (future AWS infrastructure)
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
