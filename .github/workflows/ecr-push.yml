@@ -60,9 +60,9 @@ jobs:
           push: true
           tags: ${{ env.ECR_REGISTRY }}/${{ env.FRONTEND_REPOSITORY }}:${{ github.sha }}
 
-
-    runs-on: ubuntu-latest  deploy:
+  deploy:
     name: Deploy to HospitalFlow EC2
+    runs-on: ubuntu-latest
     needs: build-and-push
 
     steps:
@@ -73,21 +73,26 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
           role-session-name: HospitalFlowDeploy
 
-      - name: Send deployment command
+      - name: Deploy through AWS Systems Manager
         env:
           IMAGE_TAG: ${{ needs.build-and-push.outputs.image-tag }}
         shell: bash
         run: |
           set -euo pipefail
 
-          cat > deploy-parameters.json <<EOF
-          {
-            "commands": [
+          python3 - <<'PY'
+          import json
+          import os
+
+          tag = os.environ["IMAGE_TAG"]
+          registry = os.environ["ECR_REGISTRY"]
+
+          commands = [
               "set -eu",
-              "aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 126309364316.dkr.ecr.us-east-1.amazonaws.com",
+              f"aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin {registry}",
               "docker network inspect hospitalflow-ai-network >/dev/null",
-              "docker pull 126309364316.dkr.ecr.us-east-1.amazonaws.com/hospitalflow-ai-backend:${IMAGE_TAG}",
-              "docker pull 126309364316.dkr.ecr.us-east-1.amazonaws.com/hospitalflow-ai-frontend:${IMAGE_TAG}",
+              f"docker pull {registry}/hospitalflow-ai-backend:{tag}",
+              f"docker pull {registry}/hospitalflow-ai-frontend:{tag}",
               "docker inspect hospitalflow-ai-backend >/dev/null",
               "docker inspect hospitalflow-ai-frontend >/dev/null",
               "OLD_BACKEND=$(docker inspect -f '{{.Config.Image}}' hospitalflow-ai-backend)",
@@ -96,17 +101,19 @@ jobs:
               "docker rm hospitalflow-ai-frontend",
               "docker stop hospitalflow-ai-backend",
               "docker rm hospitalflow-ai-backend",
-              "docker run -d --name hospitalflow-ai-backend --network hospitalflow-ai-network --network-alias backend -p 127.0.0.1:8000:8000 --restart unless-stopped 126309364316.dkr.ecr.us-east-1.amazonaws.com/hospitalflow-ai-backend:${IMAGE_TAG}",
-              "docker run -d --name hospitalflow-ai-frontend --network hospitalflow-ai-network --network-alias frontend -p 8081:80 --restart unless-stopped 126309364316.dkr.ecr.us-east-1.amazonaws.com/hospitalflow-ai-frontend:${IMAGE_TAG}",
+              f"docker run -d --name hospitalflow-ai-backend --network hospitalflow-ai-network --network-alias backend -p 127.0.0.1:8000:8000 --restart unless-stopped {registry}/hospitalflow-ai-backend:{tag}",
+              f"docker run -d --name hospitalflow-ai-frontend --network hospitalflow-ai-network --network-alias frontend -p 8081:80 --restart unless-stopped {registry}/hospitalflow-ai-frontend:{tag}",
               "sleep 10",
               "docker inspect -f '{{.State.Running}}' hospitalflow-ai-backend | grep -qx true",
               "docker inspect -f '{{.State.Running}}' hospitalflow-ai-frontend | grep -qx true",
               "curl --fail --silent --show-error http://127.0.0.1:8000/health",
               "curl --fail --silent --show-error http://127.0.0.1:8081/api/health",
               "echo 'HospitalFlow AI deployment succeeded.'"
-            ]
-          }
-          EOF
+          ]
+
+          with open("deploy-parameters.json", "w") as f:
+              json.dump({"commands": commands}, f)
+          PY
 
           COMMAND_ID=$(aws ssm send-command \
             --instance-ids "${EC2_INSTANCE_ID}" \
@@ -147,4 +154,3 @@ jobs:
 
           echo "Timed out waiting for deployment."
           exit 1
-    
