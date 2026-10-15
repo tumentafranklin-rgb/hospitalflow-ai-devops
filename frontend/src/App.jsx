@@ -145,6 +145,7 @@ function App() {
 
         <footer>
           <span>HospitalFlow AI</span>
+          <span>AWS CI/CD · Automated Deployment</span>
           <span>Educational demonstration · Sample data only</span>
         </footer>
       </main>
